@@ -42,7 +42,7 @@
         <div class="col-3">
           <h3>Input files</h3>
           <div class="mb-3">
-            <label for="sgrna" class="form-label">sgRNAs counts</label>
+            <label for="sgrna" class="form-label">sgRNAs counts (*.count.txt) </label>
             <input
               class="form-control mkgv-file-loader"
               type="file"
@@ -51,7 +51,7 @@
           </div>
           <div class="mb-3">
             <label for="geneSummary" class="form-label"
-              >Test gene summary</label
+              >Test gene summary (*.gene_summary.txt)</label
             >
             <input
               class="form-control mkgv-file-loader"
@@ -60,7 +60,7 @@
             />
           </div>
           <div class="mb-3">
-            <label for="sgrnaSummary" class="form-label">sgRNA summary</label>
+            <label for="sgrnaSummary" class="form-label">sgRNA summary (*.sgrna_summary.txt)</label>
             <input
               class="form-control mkgv-file-loader"
               type="file"
@@ -90,6 +90,7 @@
       const DEBUG = false;
       const KEEP_FRACTION=0.1;
       const CONTROL_GENE="NO-TARGET"
+
 
 
       class MGKV {
@@ -145,8 +146,8 @@
                 "<option value='control'>Control normalization (equal median of NO-TARGET sgRNA)</option>" +
                 "</select></div>" +
                 "<div class='col'><select class='form-select' id='mgkv-plt-opts-sgb-scale'>" +
-                  "<option value='linear' selected>Linear</option>" +
-                  "<option value='log10'>Log10</option>" +
+                  "<option value='log10' selected>Log10</option>" +
+                  "<option value='linear'>Linear</option>" +
                   "<option value='log2'>Log2</option>" +
                   "</select></div>" +
               "</div>"
@@ -156,7 +157,7 @@
             $("#mgkv-boxplot-sgrna").addClass("active");
             $(".mgkv-plt-opts").addClass("visually-hidden");
             $("#mgkv-plt-opts-sgb").removeClass("visually-hidden");
-            let opts = {norm : 'raw', scale : 'linear'};
+            let opts = {norm : 'raw', scale : 'log10'};
             opts.norm = $("#mgkv-plt-opts-sgb-norm").val();
             opts.scale = $("#mgkv-plt-opts-sgb-scale").val();
             this.sgBoxPlot(opts);
@@ -176,8 +177,8 @@
                 "<option value='control'>Control normalization (NO-TARGET sgRNA)</option>" +
                 "</select></div>" +
                 "<div class='col'><select class='form-select' id='mgkv-plt-opts-sgl-scale'>" +
-                  "<option value='linear' selected>Linear</option>" +
-                  "<option value='log10'>Log10</option>" +
+                  "<option value='log10' selected>Log10</option>" +
+                  "<option value='linear'>Linear</option>" +
                   "<option value='log2'>Log2</option>" +
                   "</select></div>" +
             "</div>"
@@ -187,7 +188,7 @@
             $("#mgkv-line-sgrna").addClass("active");
             $(".mgkv-plt-opts").addClass("visually-hidden");
             $("#mgkv-plt-opts-sgl").removeClass("visually-hidden");
-            let opts = {norm : 'raw', scale : 'linear'};
+            let opts = {norm : 'raw', scale : 'log10'};
             opts.norm = $("#mgkv-plt-opts-sgl-norm").val();
             opts.scale = $("#mgkv-plt-opts-sgl-scale").val();
             this.sgLinePlot(opts);
@@ -318,7 +319,7 @@
         }
 
         sgLinePlot(userOpts){
-          let opts = Object.assign({norm : 'raw', scale : 'linear'}, userOpts);
+          let opts = Object.assign({norm : 'raw', scale : 'log10'}, userOpts);
           if ( this.selectedGene.length == 0 ){
             this.plot([], {title: "Select one or more gene to see the expression of their sgRNAs"})
             return;
@@ -365,7 +366,7 @@
 
         }
         sgBoxPlot(userOpts) {
-          let opts = Object.assign( {norm : 'raw', scale : 'linear'}, userOpts);
+          let opts = Object.assign( {norm : 'raw', scale : 'log10'}, userOpts);
           let data = this.samples.map((s) => {
             return { y: [], name: s.name, order: s.order, type: "box" };
           });
@@ -597,7 +598,7 @@
               data: this.gSummary.data,
               colReorder: true,
               rowId: "gene",
-              buttons: ["excel", "colvis", "searchBuilder"],
+              buttons: [ "colvis",  { extend : "searchBuilder" , config : { depthLimit : 3}}],
               order : [[2, 'desc']],
               columns: [
                 {
@@ -610,123 +611,123 @@
                   title: "sgRNA",
                   data: "numSgRNA",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                 },
                 {
                   title: "logFC",
                   data: "LFC",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: true,
                 },
                 {
                   title: "FDR",
                   data: "FDR",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: true,
                 },
                 {
                   title: "p-value",
                   data: "pvalue" ,
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: true,
                 },
                 {
                   title: "Rank",
                   data: "rank",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: true,
                 },
                 {
                   title: "Neg score",
                   data: "neg.score",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: false,
                 },
                 {
                   title: "Neg pvalue",
                   data: "neg.pvalue",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: false,
                 },
                 {
                   title: "Neg FDR",
                   data: "neg.FDR",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: false,
                 },
                 {
                   title: "Neg rank",
                   data: "neg.rank",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: false,
                 },
                 {
                   title: "Neg good",
                   data: "neg.good",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: false,
                 },
                 {
                   title: "Neg LFC",
                   data: "neg.LFC",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: false,
                 },
                 {
                   title: "Pos score",
                   data: "pos.score",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: false,
                 },
                 {
                   title: "Pos pvalue",
                   data: "pos.pvalue",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: false,
                 },
                 {
                   title: "Pos FDR",
                   data: "pos.FDR",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: false,
                 },
                 {
                   title: "Pos rank",
                   data: "pos.rank",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: false,
                 },
                 {
                   title: "Pos good",
                   data: "pos.good",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: false,
                 },
                 {
                   title: "Pos LFC",
                   data: "pos.LFC",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible: false,
                 }
               ],
             });
-
+            
             this.sgTable = $("#mgkv-sg-table").DataTable({
               scrollY: "500px",
               scrollCollapse: true,
@@ -758,50 +759,50 @@
                   title: "logFC",
                   data: "LFC",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                 },
                 {
                   title: "Score",
                   data: "score",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                 },
                 {
                   title: "p-value neg",
                   data: "pLow",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                 },
                 {
                   title: "p-value pos",
                   data: "pHigh",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                 },
                 {
                   title: "p-value",
                   data: "pvalue",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                 },
                 {
                   title: "FDR",
                   data: "FDR",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                 },
                 {
                   title: "Ctr. Var",
                   data: "control_var",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible : false
                 },
                 {
                   title: "Adj. Var",
                   data: "adj_var",
                   orderable: true,
-                  searchable: false,
+                  searchable: true,
                   visible : false
                 },
               ],
