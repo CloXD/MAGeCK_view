@@ -13,13 +13,14 @@
       integrity="sha384-KK94CHFLLe+nY2dmCWGMq91rCGa5gtU4mk92HdvYe+M/SXH301p5ILy+dN9+nJOZ"
       crossorigin="anonymous"
     />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.2/font/bootstrap-icons.css" integrity="sha384-b6lVK+yci+bfDmaY1u0zE8YYJt0TZxLEAFyYSLHId4xoVvsrQu3INevFKo+Xir8e" crossorigin="anonymous">
   </head>
   <body>
     <div
       id="mgkv-loading"
-      class="position-absolute top-0 start-0 vh-100 vw-100 d-flex align-items-center justify-content-center bg-light"
+      class="position-absolute z-3 top-0 start-0 vh-100 vw-100 d-flex align-items-center justify-content-center bg-light"
     >
-      <div class="spinner-border text-success" role="status"></div>
+      <div class="me-3 spinner-border text-success" role="status"></div>
       <h3>Loading the application</h3>
     </div>
     <div id="main-container" class="container visually-hidden">
@@ -29,7 +30,14 @@
             MAGeCK results viewer
           </h1>
         </div>
+        <div class="col d-flex align-items-center justify-content-end">
+          <a href="https://github.com/CloXD/MAGeCK_view" target="_blank" class="icon-link link-dark fs-2">
+            <i class="bi bi-github"></i>
+          </a>
+          </h1>
+        </div>
       </div>
+      
       <div class="row">
         <div class="col-12">
           <div class="px-2" id="mageckView"></div>
@@ -67,6 +75,26 @@
               data-type="sgrnaSummary"
             />
           </div>
+          <div class="mb-3">
+            <label for="libraryFile" class="form-label">sgRNA Library</label><br/>
+            <div class="input-group">
+              <input type="text" class="form-control" placeholder="Library Name" id="library-input-name">
+              <input
+                id="library-input-file"
+                class="form-control"
+                type="file"
+                data-type="libraryFile"
+              />
+              <button class="btn btn-outline-primary" id="btn-add-library">Add</button>
+            </div>
+            <small>A list of sgRNA, one line for each name.</small><br>
+            <small>Leave empty for Calabrese library autodetection.</small><br>
+            <ul class="list-group" id="library-list">
+            </ul>
+          </div>
+          <div class="mb-3">
+            <button type="button" class="btn btn-primary" id="load-button" disabled>Load</button>
+          </div>
         </div>
       </div>
     </div>
@@ -82,17 +110,94 @@
       crossorigin="anonymous"
     ></script>
     <script type="text/javascript">
+
+      $(document).ready(function () {
+        $("#mgkv-loading").remove();
+        $("#main-container").removeClass("visually-hidden");
+        let mgkv = new MGKV($("#mageckView"));
+        mgkv.afterInit = () => {
+          $("#file_loader").hide();
+        };
+
+        $("#btn-add-library").click(()=>{
+          let el = document.getElementById("library-input-file")
+          $("#library-input-name").removeClass("is-invalid")
+          if ( el.files && el.files.length  == 1 ){
+            let libName = $("#library-input-name").val()
+            let file = el.files[0]
+            if ( libName.length > 0 ){
+              mgkv.parseLibrary(file, libName, (idx)=>{
+                $("#library-input-name").removeClass("is-invalid")  
+                $("#library-list").append("<li class='list-group-item'>"+libName+" ("+mgkv.sgLibrary[idx].sgrnas.length+" sgRNAs) <button class='btn btn-sm btn-outline-danger float-end library-remover' data-idx='"+idx+"'><i><i class='bi bi-trash'></i></i></button> </li>")
+              }, ()=>{})
+            } else {
+              $("#library-input-name").addClass("is-invalid")
+            }
+          }
+        })
+        $("#library-list").on("click","button",(el)=>{
+          let libIdx = parseInt($(el.currentTarget).attr("data-idx"))
+          mgkv.sgLibrary.splice(libIdx, 1);
+          $(el.currentTarget).parent().remove();
+        })
+       
+        let fls = $("input.mkgv-file-loader");
+        if ( mgkv.hasLibrary ){
+          $("#library-input").addClass('is-valid');
+        }
+        let loadFile = (el) => {
+          let data_type = $(el).attr("data-type");
+          if (data_type && el.files && el.files.length == 1) {
+            mgkv.parse(
+              el.files[0],
+              data_type,
+              () => {
+                $(el).removeClass("is-invalid");
+                $(el).addClass("is-valid");
+                if ( mgkv.ready ){
+                  $("#load-button").attr("disabled", false)
+                }
+              },
+              (err) => {
+                $(el).removeClass("is-valid");
+                $(el).addClass("is-invalid");
+              }
+            );
+          }
+        };
+
+        for (let i = 0; i < fls.length; i++) {
+          loadFile(fls.get(i));
+        }
+        
+
+        $("input.mkgv-file-loader").change((e) => {
+          loadFile(e.target);
+        });
+        $("#load-button").click(()=>{
+          mgkv.load();
+        })
+
+      });
+
+      /// MGKV.js
+
       const SGC_DT = "sgrna";
       const SGS_DT = "sgrnaSummary";
       const GS_DT = "geneSummary";
-      const ALERT_TIMEOUT = 5000;
+      const ALERT_TIMEOUT = 2000;
       const COLOR_P = ["#04AF54", "#AFAA05", "#5D05AF", "#AF0585", "#68DE3D"];
-      const DEBUG = false;
       const KEEP_FRACTION=0.1;
-      const CONTROL_GENE="NO-TARGET"
-
-
-
+      const CONTROL_GENE="NO-TARGET";
+      function download(filename, text) {
+        var element = document.createElement('a');
+        element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+        element.setAttribute('download', filename);
+        element.style.display = 'none';
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
+      }
       class MGKV {
         constructor(root) {
           if (typeof root == "string") {
@@ -119,16 +224,19 @@
           this._initSgBoxplot();
           this._initVolcanoPlot();
           this._initSgLinePlot();
-
           this.alerts = new Alerts();
+          
         }
-        sgCount = { header: [], data: [] };
+        sgCount = { completed : false };
         gSummary = { header: [], data: [] };
         sgSummary = { header: [], data: [] };
+        sgLibrary = [];
         geneTable = undefined;
         sgTable = undefined;
         selectedGene = [];
         normalization_factors = undefined;
+        control_gene = CONTROL_GENE;
+        _display_count_normalization = "raw";
 
         afterInit = () => {};
         samples = [];
@@ -257,54 +365,24 @@
           });
         }
 
-        debug(save = false) {
-          if (save) {
-            let gSummary_partial = {
-              header: this.gSummary.header,
-              data: this.gSummary.data.slice(0, 10),
-            };
-            let genes = gSummary_partial.data.map((v) => v.gene);
-            let sgSummary_partial = {
-              header: this.sgSummary.header,
-              data: this.sgSummary.data.filter((d) => genes.includes(d.gene)),
-            };
-            let sgCount_partial = {
-              header: this.sgCount.header,
-              data: this.sgCount.data.filter((d) => genes.includes(d.gene)),
-            };
-            localStorage.setItem(
-              "mgkv-test",
-              JSON.stringify({
-                gSummary: gSummary_partial,
-                sgSummary: sgSummary_partial,
-                sgCount: sgCount_partial,
-                samples: this.samples,
-              })
-            );
-          } else {
-            let obj = localStorage.getItem("mgkv-test");
-            if (obj) {
-              obj = JSON.parse(obj);
-              this.sgSummary = obj.sgSummary;
-              this.gSummary = obj.gSummary;
-              this.samples = obj.samples;
-              this.sgCount = obj.sgCount;
-              this.initTables();
-            }
-          }
-        }
+        
 
         get ready() {
           return (
-            this.sgCount.header.length > 0 &&
+            ( this.sgCount.completed ||  Object.keys(this.sgCount).length > 0 ) &&
             this.gSummary.header.length > 0 &&
-            this.sgSummary.header.length > 0
+            this.sgSummary.header.length > 0 
           );
+        }
+
+        
+        get hasLibrary(){
+          return this.sgLibrary.length > 0;
         }
 
         validInput(fileName, dataType) {
           return (
-            (fileName.match(".*.(count|normalized).txt$") &&
+            (fileName.match(".*.count.txt$") &&
               dataType == SGC_DT) ||
             (fileName.match(".*.gene_summary.txt$") && dataType == GS_DT) ||
             (fileName.match(".*.sgrna_summary.txt$") && dataType == SGS_DT)
@@ -326,13 +404,13 @@
           }
           let data = [];
           let genes = this.selectedGene.map((sg)=>sg.name);
-          this.sgCount.data.filter((d)=>genes.includes(d.gene)).forEach((sg)=>{
+          this.sgSummary.data.filter((d)=>genes.includes(d.gene)).forEach((sg)=>{
             let gene= this.selectedGene.find((g)=>g.name == sg.gene);
             let gene_idx = genes.indexOf(sg.gene)
             let dat = { x : [] ,y: [], order : gene_idx, name : sg.sgrna + " ("+sg.gene+")" ,  type: "scatter", marker : { color : gene.color , size: 15} , line : { color : gene.color } }
             sg.counts.forEach((c, i)=>{
               dat.x.push(this.samples[i].name);
-              let nc = opts.norm == 'raw' ? c : this.normalization_factors[opts.norm][i] * c;
+              let nc = this.normalization_factors[opts.norm][i] * c;
               if ( opts.scale == 'log10'){
                 dat.y.push(nc==0? 0 : Math.log10(nc))
               } else if (opts.scale == 'log2'){
@@ -363,16 +441,15 @@
           }
           data = data.sort((a,b)=>a.order - b.order);
           this.plot(data, layout)
-
         }
         sgBoxPlot(userOpts) {
           let opts = Object.assign( {norm : 'raw', scale : 'log10'}, userOpts);
           let data = this.samples.map((s) => {
             return { y: [], name: s.name, order: s.order, type: "box" };
           });
-          this.sgCount.data.forEach((dat) => {
+          this.sgSummary.data.forEach((dat) => {
             dat.counts.forEach((c, idx) => {
-              let nc = opts.norm == 'raw' ? c : this.normalization_factors[opts.norm][idx] * c;
+              let nc =this.normalization_factors[opts.norm][idx] * c;
               if ( opts.scale == 'log10'){
                 data[idx].y.push(nc==0? 0 : Math.log10(nc))
               } else if (opts.scale == 'log2'){
@@ -572,7 +649,7 @@
           this.plot(data, layout);
         }
 
-        initTables() {
+        _initTables() {
           return new Promise((resolve, reject) => {
             if (!this.ready) {
               reject("Not ready");
@@ -598,7 +675,7 @@
               data: this.gSummary.data,
               colReorder: true,
               rowId: "gene",
-              buttons: [ "colvis",  { extend : "searchBuilder" , config : { depthLimit : 3}}],
+              buttons: [ "csv",  "colvis",  { extend : "searchBuilder" , config : { depthLimit : 3}}],
               order : [[2, 'desc']],
               columns: [
                 {
@@ -727,8 +804,92 @@
                 }
               ],
             });
+            let sgTableCols = [
+            {
+              title: "sgRNA",
+              data: "sgrna",
+              orderable: true,
+              searchable: true,
+            },{
+              title : "Library",
+              data : "library",
+              orderable : true,
+              searchable : true
+            },
+            {
+              title: "Gene",
+              data: "gene",
+              name: "gene",
+              orderable: true,
+              searchable: true,
+            },
+            {
+              title: "logFC",
+              data: "LFC",
+              orderable: true,
+              searchable: true,
+            },
+            {
+              title: "Score",
+              data: "score",
+              orderable: true,
+              searchable: true,
+            },
+            {
+              title: "p-value neg",
+              data: "pLow",
+              orderable: true,
+              searchable: true,
+              visible : false
+            },
+            {
+              title: "p-value pos",
+              data: "pHigh",
+              orderable: true,
+              searchable: true,
+              visible : false
+            },
+            {
+              title: "p-value",
+              data: "pvalue",
+              orderable: true,
+              searchable: true,
+            },
+            {
+              title: "FDR",
+              data: "FDR",
+              orderable: true,
+              searchable: true,
+            },
+            {
+              title: "Ctr. Var",
+              data: "control_var",
+              orderable: true,
+              searchable: true,
+              visible : false
+            },
+            {
+              title: "Adj. Var",
+              data: "adj_var",
+              orderable: true,
+              searchable: true,
+              visible : false
+            },
+          ];
+          this.samples.forEach((sam, idx)=>{
+            sgTableCols.push({
+              title : sam.name,
+              data : null,
+              render : (row)=>{
+                return Math.round(this.normalization_factors[this._display_count_normalization][idx] * row.counts[idx] * 100)/100
+              },orderable: true,
+              searchable: true,
+              visible : true
+            })
+          })
+          
             
-            this.sgTable = $("#mgkv-sg-table").DataTable({
+          this.sgTable = $("#mgkv-sg-table").DataTable({
               scrollY: "500px",
               scrollCollapse: true,
               dom:
@@ -739,73 +900,102 @@
               data: this.sgSummary.data,
               colReorder: true,
               rowId: "sgrna",
-              buttons: ["excel", "colvis", "searchBuilder"],
-              order : [[2, 'desc']],
-              columns: [
-                {
-                  title: "sgRNA",
-                  data: "sgrna",
-                  orderable: true,
-                  searchable: true,
-                },
-                {
-                  title: "Gene",
-                  data: "gene",
-                  name: "gene",
-                  orderable: true,
-                  searchable: true,
-                },
-                {
-                  title: "logFC",
-                  data: "LFC",
-                  orderable: true,
-                  searchable: true,
-                },
-                {
-                  title: "Score",
-                  data: "score",
-                  orderable: true,
-                  searchable: true,
-                },
-                {
-                  title: "p-value neg",
-                  data: "pLow",
-                  orderable: true,
-                  searchable: true,
-                },
-                {
-                  title: "p-value pos",
-                  data: "pHigh",
-                  orderable: true,
-                  searchable: true,
-                },
-                {
-                  title: "p-value",
-                  data: "pvalue",
-                  orderable: true,
-                  searchable: true,
-                },
-                {
-                  title: "FDR",
-                  data: "FDR",
-                  orderable: true,
-                  searchable: true,
-                },
-                {
-                  title: "Ctr. Var",
-                  data: "control_var",
-                  orderable: true,
-                  searchable: true,
-                  visible : false
-                },
-                {
-                  title: "Adj. Var",
-                  data: "adj_var",
-                  orderable: true,
-                  searchable: true,
-                  visible : false
-                },
-              ],
+              buttons: [ "csv", "colvis", "searchBuilder", {
+                extend: 'collection',
+                text : 'Count types',
+                buttons : [
+                  { 
+                    text : 'raw', className : this._display_count_normalization == "raw" ? "active norm-buttons" : "norm-buttons" ,
+                    action : (_, dt, btn)=>{
+                      if ( this._display_count_normalization != "raw"){
+                        $(".norm-buttons").removeClass("active")
+                        btn.addClass("active")
+                        this._display_count_normalization = "raw";
+                        dt.rows().invalidate().draw(false);
+                      }
+                    }
+                },{ 
+                  text : 'Median normalized', className : this._display_count_normalization == "median" ? "active norm-buttons" : "norm-buttons" ,
+                  action : (_, dt, btn)=>{
+                    if ( this._display_count_normalization != "median"){
+                      $(".norm-buttons").removeClass("active")
+                      btn.addClass("active")
+                      this._display_count_normalization = "median";
+                      dt.rows().invalidate().draw(false);
+                    }
+                  }
+              },{ 
+                  text : 'Total normalized', className : this._display_count_normalization == "total" ? "active norm-buttons" : "norm-buttons" ,
+                  action : (_, dt, btn)=>{
+                    if ( this._display_count_normalization != "total"){
+                      $(".norm-buttons").removeClass("active")
+                      btn.addClass("active")
+                      this._display_count_normalization = "total";
+                      dt.rows().invalidate().draw(false);
+                    }
+                  }
+              },{ 
+                text : 'Control normalized', className : this._display_count_normalization == "control" ? "active norm-buttons" : "norm-buttons" ,
+                action : (_, dt, btn)=>{
+                  if ( this._display_count_normalization != "control"){
+                    $(".norm-buttons").removeClass("active")
+                    btn.addClass("active")
+                    this._display_count_normalization = "control";
+                    dt.rows().invalidate().draw(false);
+                  }
+                }
+            }
+                ]
+              }, {
+                extend: 'collection',
+                text : 'Download filtered count table',
+                buttons : [
+                  { text : 'Raw', 
+                    action : (_, dt)=>{
+                    let outfile = "sgRNA\tGene\t" + this.samples.map((sam)=>sam.name).join("\t")+"\n";
+                    dt.rows({search : 'applied'}).data().toArray().forEach((el)=>{
+                      outfile+= [el.sgrna, el.gene ].concat(el.counts).join("\t")+"\n"
+                    });
+                    download("raw.counts.txt", outfile);
+                    }
+                  }, {
+                    text : 'Median normalized',
+                    action : (_, dt)=>{
+                      let outfile = "sgRNA\tGene\t" + this.samples.map((sam)=>sam.name).join("\t")+"\n";
+                      let data = dt.rows({search : 'applied'}).data().toArray();
+                      let nf = this._computeMedianNormFactor(data)
+                      data.forEach((el)=>{
+                        outfile+= [el.sgrna, el.gene ].concat(el.counts.map((v, i)=>Math.round(v*nf[i]*100)/100)).join("\t")+"\n"
+                      })
+                      download("median_normalized.counts.txt", outfile);
+                    }
+                  }, {
+                    text : 'Total normalized',
+                    action : (_, dt)=>{
+                      let outfile = "sgRNA\tGene\t" + this.samples.map((sam)=>sam.name).join("\t")+"\n";
+                      let data = dt.rows({search : 'applied'}).data().toArray();
+                      let nf = this._computeTotalNormFactor(data)
+                      data.forEach((el)=>{
+                        outfile+= [el.sgrna, el.gene ].concat(el.counts.map((v, i)=>Math.round(v*nf[i]*100)/100)).join("\t")+"\n"
+                      })
+                      download("total_normalized.counts.txt", outfile);
+                    }
+                  }, {
+                    text : 'Control normalized',
+                    action : (_, dt)=>{
+                      let outfile = "sgRNA\tGene\t" + this.samples.map((sam)=>sam.name).join("\t")+"\n";
+                      let data = dt.rows({search : 'applied'}).data().toArray();
+                      let nf = this._computeControlNormFactor(data);
+                      data.forEach((el)=>{
+                        outfile+= [el.sgrna, el.gene ].concat(el.counts.map((v, i)=>Math.round(v*nf[i]*100)/100)).join("\t")+"\n"
+                      })
+                      download("control_normalized.counts.txt", outfile);
+                    }
+                  }
+                ] 
+              }],
+              order : [[3, 'desc']],
+              columns: sgTableCols,
             });
             $("#mgkv-gene-table tbody").on("click", "tr", (el) => {
               let $el = $(el.currentTarget);
@@ -836,7 +1026,7 @@
             this.selectedGene = [];
             this.gSummary = undefined;
             this.sgSummary = undefined;
-            this.sgCount = undefined;
+            this.sgCount = { completed : false};
             this.samples = [];
             this.root.addClass("visually-hidden");
             this.geneTable.destroy();
@@ -870,7 +1060,7 @@
           return new Promise((resolve, reject) => {
             if (val) {
               $("body").append(
-                "<div id='mgkv-loading' class='position-absolute top-0 start-0 vh-100 vw-100 d-flex align-items-center justify-content-center bg-light'><div class='spinner-border text-success' role='status'></div><h3>Loading the data</h3></div>"
+                "<div id='mgkv-loading' class='position-absolute z-3 top-0 start-0 vh-100 vw-100 d-flex align-items-center justify-content-center bg-light'><div class='spinner-border text-success me-2' role='status'></div><h3>Loading the data</h3></div>"
               );
             } else {
               $("#mgkv-loading").remove();
@@ -885,6 +1075,7 @@
           succes_callback = () => {},
           error_callback = (err) => {}
         ) {
+          
           if (this.validInput(file.name, data_type)) {
             let reader = new FileReader();
             let data = "";
@@ -892,6 +1083,7 @@
               data = data + reader.result;
             };
             reader.readAsText(file);
+            
             reader.onloadend = () => {
               if (data_type == SGC_DT) {
                 this.parseSgCount(data, succes_callback, error_callback);
@@ -902,14 +1094,7 @@
               if (data_type == SGS_DT) {
                 this.parseSgSummary(data, succes_callback, error_callback);
               }
-              if (this.ready) {
-                this.debug(true);
-                this.loading(true).then(() => {
-                  this.initTables().then(() => {
-                    this.loading(false);
-                  });
-                });
-              }
+              
             };
           } else {
             this.alerts.error(
@@ -919,8 +1104,62 @@
           }
         }
 
+        load(){
+          return new Promise((resolve, reject)=>{
+            if (this.ready) {
+              if ( this.hasLibrary ){
+                this.sgSummary.data.forEach((sg)=>{
+                  sg.counts = this.sgCount[sg.sgrna];
+                  sg.library = this.sgLibrary.find((sgl)=>sgl.sgrnas.includes(sg.sgrna))?.name;
+                })   
+              } else {
+                /// Calabrese Libraries: setA are just number, setB are geneName_number
+                this.sgSummary.data.forEach((sg)=>{
+                  sg.counts = this.sgCount[sg.sgrna];
+                  sg.library = sg.sgrna.match(/^[0-9]+$/) ? "libA" : "libB";
+                })
+                this.normalization_factors = this.computeNormalizationFactors(this.sgSummary.data);
+              }
+              this.sgCount = {completed : true};
+              
+              this.loading(true).then(() => {
+                this._initTables().then(() => {
+                  this.loading(false).then(resolve);
+                }).catch((err)=>{
+                  reject(err);
+                });
+              });
+            } else {
+              reject("Not redy")
+            }
+          })
+          
+        }
+        parseLibrary(file, libraryName, succes_callback, error_callback) {
+          let reader = new FileReader();
+          let data = "";
+          reader.onload = () => {
+            data = data + reader.result;
+          };
+          reader.readAsText(file);
+          reader.onloadend = () => {
+            let lib = {name : libraryName, sgrnas : []}
+            data = data.split("\n");
+            let line ;
+            for (let idx = 0; idx < data.length; idx++) {
+                line = data[idx].split("\t");
+                lib.sgrnas.push(line[0]);
+            }
+            this.sgLibrary.push(lib);
+            succes_callback(this.sgLibrary.length-1);
+            return true;
+          }
+          
+        }
+
+
         parseSgCount(data, succes_callback, error_callback) {
-          this.sgCount = { header: [], data: [] };
+          this.sgCount = {  };
           data = data.split("\n");
           let line;
           for (let idx = 0; idx < data.length; idx++) {
@@ -933,30 +1172,33 @@
                 );
                 return false;
               } else {
-                this.sgCount.header = line;
                 this.samples = line.slice(2).map((v, idx) => {
                   return { name: v, order: idx, group: undefined };
                 });
               }
             } else {
-              this.sgCount.data.push({
-                sgrna: line[0],
-                gene: line[1],
-                counts: line.slice(2).map((v) => parseFloat(v)),
-              });
+              this.sgCount[line[0]]=line.slice(2).map((v) => parseFloat(v));
             }
           }
-          this.computeNormalizationFactors();
           this.alerts.success("sgCount added correctly");
           succes_callback();
           return true;
         }
+        _computeControlNormFactor(data){
+          let d1 = data.filter((sg)=>sg.gene == this.control_gene)
+          if ( d1.length == 0 ){
+            this.alerts.warning("No control sgRNA found! Setting the normalization factors to 1")
+            return Array(data[0].counts.length).fill(1)
+          } else {
+            return this._computeMedianNormFactor(d1);
+          }
+        }
 
-        _computeMedianNormFactor(sgCount){
-          let n = sgCount[0].counts.length;
-          let m = sgCount.length;
+        _computeMedianNormFactor(data){
+          let n = data[0].counts.length;
+          let m = data.length;
           let meanVal = Array(m).fill(-1)
-          sgCount.forEach((cnt, idx)=>{
+          data.forEach((cnt, idx)=>{
             if ( cnt.counts.reduce((p,v)=>p+v, 0) > 0 ){
               meanVal[idx]=Math.exp(cnt.counts.map((v)=>Math.log(v+1)).reduce((p, c)=>p+c, 0)*1.0 / n)
               if ( meanVal[idx] <= 0 ){
@@ -966,28 +1208,34 @@
           });
           let medianFactor = Array(n).fill(0);
           for ( let ni=0; ni < n; ni++){
-            let meanFactor = sgCount.map((sg, idx)=>sg.counts[ni]/meanVal[idx]).filter((v, idx)=>meanVal[idx]!=-1)
+            let meanFactor = data.map((sg, idx)=>sg.counts[ni]/meanVal[idx]).filter((v, idx)=>meanVal[idx]!=-1)
             let xFactor = meanFactor.sort()[Math.floor(meanFactor.length / 2)];
             medianFactor[ni]= xFactor > 0 ? 1.0/xFactor : 0;
           }
           return medianFactor;
         }
-
-        computeNormalizationFactors(){
-          /// Adapted from mageckCountNorm.py 
-          this.normalization_factors = {} 
-          let n = this.samples.length;
-          let m = this.sgCount.data.length;
+        _computeTotalNormFactor(data){
+          let n = data[0].counts.length;
+          let m = data.length;
           let sumSamples = Array(n).fill(0);
-          this.sgCount.data.forEach((cnt)=>{
+          data.forEach((cnt)=>{
             cnt.counts.forEach((v, i)=>sumSamples[i]+=v)
           });
           let avgSample = sumSamples.reduce((p, c)=>p+c, 0) / n;
-          this.normalization_factors.total = sumSamples.map((v)=>avgSample / v);
-          this.normalization_factors.median = this._computeMedianNormFactor(this.sgCount.data);
-          this.normalization_factors.control = this._computeMedianNormFactor(this.sgCount.data.filter((sg)=>sg.gene == CONTROL_GENE));
-          
+          return sumSamples.map((v)=>avgSample / v)
         }
+
+        computeNormalizationFactors(data){
+          /// Adapted from mageckCountNorm.py 
+          let normalization_factors = {};
+          normalization_factors.raw = Array(data[0].counts.length).fill(1);
+          normalization_factors.total = this._computeTotalNormFactor(data);
+          normalization_factors.median = this._computeMedianNormFactor(data);
+          normalization_factors.control = this._computeControlNormFactor(data);
+          return normalization_factors
+        }
+
+
 
         parseGeneSummary(data, succes_callback, error_callback) {
           this.gSummary = { header: [], data: [] };
@@ -1143,44 +1391,7 @@
         }
       }
 
-      $(document).ready(function () {
-        $("#mgkv-loading").remove();
-        $("#main-container").removeClass("visually-hidden");
-        let mgkv = new MGKV($("#mageckView"));
-        mgkv.afterInit = () => {
-          $("#file_loader").hide();
-        };
-        
-        if (DEBUG) {
-          mgkv.debug();
-        }
-        let fls = $("input.mkgv-file-loader");
-        let loadFile = (el) => {
-          let data_type = $(el).attr("data-type");
-          if (data_type && el.files && el.files.length == 1) {
-            mgkv.parse(
-              el.files[0],
-              data_type,
-              () => {
-                $(el).removeClass("is-invalid");
-                $(el).addClass("is-valid");
-              },
-              (err) => {
-                $(el).removeClass("is-valid");
-                $(el).addClass("is-invalid");
-              }
-            );
-          }
-        };
-
-        for (let i = 0; i < fls.length; i++) {
-          loadFile(fls.get(i));
-        }
-
-        $("input.mkgv-file-loader").change((e) => {
-          loadFile(e.target);
-        });
-      });
+      
     </script>
   </body>
 </html>
