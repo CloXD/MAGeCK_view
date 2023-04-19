@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>MAGeCK results viewer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      href="https://cdn.datatables.net/v/bs5/dt-1.13.4/b-2.3.6/b-colvis-2.3.6/b-html5-2.3.6/cr-1.6.2/sb-1.4.2/datatables.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-KK94CHFLLe+nY2dmCWGMq91rCGa5gtU4mk92HdvYe+M/SXH301p5ILy+dN9+nJOZ"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.2/font/bootstrap-icons.css" integrity="sha384-b6lVK+yci+bfDmaY1u0zE8YYJt0TZxLEAFyYSLHId4xoVvsrQu3INevFKo+Xir8e" crossorigin="anonymous">
+  </head>
+  <body>
+    <div
+      id="mgkv-loading"
+      class="position-absolute z-3 top-0 start-0 vh-100 vw-100 d-flex align-items-center justify-content-center bg-light"
+    >
+      <div class="me-3 spinner-border text-success" role="status"></div>
+      <h3>Loading the application</h3>
+    </div>
+    <div id="main-container" class="container visually-hidden">
+      <div class="row">
+        <div class="col">
+          <h1>
+            MAGeCK results viewer
+          </h1>
+        </div>
+        <div class="col d-flex align-items-center justify-content-end">
+          <a href="https://github.com/CloXD/MAGeCK_view" target="_blank" class="icon-link link-dark fs-2">
+            <i class="bi bi-github"></i>
+          </a>
+          </h1>
+        </div>
+      </div>
+      
+      <div class="row">
+        <div class="col-12">
+          <div class="px-2" id="mageckView"></div>
+        </div>
+      </div>
+      <div
+        class="row align-items-center justify-content-center"
+        id="file_loader"
+      >
+        <div class="col-3">
+          <h3>Input files</h3>
+          <div class="mb-3">
+            <label for="sgrna" class="form-label">sgRNAs counts (*.count.txt) </label>
+            <input
+              class="form-control mkgv-file-loader"
+              type="file"
+              data-type="sgrna"
+            />
+          </div>
+          <div class="mb-3">
+            <label for="geneSummary" class="form-label"
+              >Test gene summary (*.gene_summary.txt)</label
+            >
+            <input
+              class="form-control mkgv-file-loader"
+              type="file"
+              data-type="geneSummary"
+            />
+          </div>
+          <div class="mb-3">
+            <label for="sgrnaSummary" class="form-label">sgRNA summary (*.sgrna_summary.txt)</label>
+            <input
+              class="form-control mkgv-file-loader"
+              type="file"
+              data-type="sgrnaSummary"
+            />
+          </div>
+          <div class="mb-3">
+            <label for="libraryFile" class="form-label">sgRNA Library</label><br/>
+            <div class="input-group">
+              <input type="text" class="form-control" placeholder="Library Name" id="library-input-name">
+              <input
+                id="library-input-file"
+                class="form-control"
+                type="file"
+                data-type="libraryFile"
+              />
+              <button class="btn btn-outline-primary" id="btn-add-library">Add</button>
+            </div>
+            <small>A list of sgRNA, one line for each name.</small><br>
+            <small>Leave empty for Calabrese library autodetection.</small><br>
+            <ul class="list-group" id="library-list">
+            </ul>
+          </div>
+          <div class="mb-3">
+            <button type="button" class="btn btn-primary" id="load-button" disabled>Load</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+    <script src="https://cdn.datatables.net/v/bs5/dt-1.13.4/b-2.3.6/b-colvis-2.3.6/b-html5-2.3.6/cr-1.6.2/sb-1.4.2/datatables.min.js"></script>
+    <script
+      src="https://cdn.plot.ly/plotly-2.20.0.min.js"
+      charset="utf-8"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-ENjdO4Dr2bkBIFxQpeoTz1HIcje39Wm4jDKdf19U8gI4ddQ3GYNS7NTKfAdVQSZe"
+      crossorigin="anonymous"
+    ></script>
+    <script type="text/javascript">    
+//MAGECK_VIEW
+    </script>
+    <script type="text/javascript">
+
+      $(document).ready(function () {
+        $("#mgkv-loading").remove();
+        $("#main-container").removeClass("visually-hidden");
+        let mgkv = new MGKV($("#mageckView"));
+        mgkv.afterInit = () => {
+          $("#file_loader").hide();
+        };
+
+        $("#btn-add-library").click(()=>{
+          let el = document.getElementById("library-input-file")
+          $("#library-input-name").removeClass("is-invalid")
+          if ( el.files && el.files.length  == 1 ){
+            let libName = $("#library-input-name").val()
+            let file = el.files[0]
+            if ( libName.length > 0 ){
+              mgkv.parseLibrary(file, libName).then((idx)=>{
+                $("#library-input-name").removeClass("is-invalid")  
+                $("#library-list").append("<li class='list-group-item'>"+libName+" ("+mgkv.library[idx].sgrnas.length+" sgRNAs) <button class='btn btn-sm btn-outline-danger float-end library-remover' data-idx='"+idx+"'><i><i class='bi bi-trash'></i></i></button> </li>")
+              });
+            } else {
+              $("#library-input-name").addClass("is-invalid")
+              $(el).val(undefined)
+            }
+          }
+        })
+        $("#library-list").on("click","button",(el)=>{
+          let libIdx = parseInt($(el.currentTarget).attr("data-idx"))
+          mgkv.library.splice(libIdx, 1);
+          $(el.currentTarget).parent().remove();
+        })
+       
+        let fls = $("input.mkgv-file-loader");
+        if ( mgkv.hasLibrary ){
+          $("#library-input").addClass('is-valid');
+        }
+        let loadFile = (el) => {
+          let data_type = $(el).attr("data-type");
+          if (data_type && el.files && el.files.length == 1) {
+            mgkv.parse(
+              el.files[0],
+              data_type).then(()=>{
+                $(el).removeClass("is-invalid");
+                $(el).addClass("is-valid");
+                if ( mgkv.ready ){
+                  $("#load-button").attr("disabled", false)
+                }
+              }).catch((err)=>{
+                $(el).removeClass("is-valid");
+                $(el).addClass("is-invalid");
+                $(el).val(undefined)
+              });
+          }
+        };
+
+        for (let i = 0; i < fls.length; i++) {
+          loadFile(fls.get(i));
+        }
+        
+
+        $("input.mkgv-file-loader").change((e) => {
+          loadFile(e.target);
+        });
+        $("#load-button").click(()=>{
+          mgkv.load();
+        })
+
+      });
+
+
+      
+    </script>
+  </body>
+</html>
