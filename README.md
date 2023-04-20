@@ -1,34 +1,12 @@
 # MAGeCK view
 A JavaScript project to visualize the results of MAGeCK. 
-It's currenlty quite slow, but for a two-days project It's not so bad :) 
-
-## Development Guide
-
-### Install
-
-First install the dependencies:
-
-```
-npm install
-```
-
-For development:
-
-```
-npm run dev
-```
-
-For building the mageckView.html
-
-```
-npm run build
-```
-
-Files in the data folder are the demo of MAGeCK ( demo1 )
 
 
 ## User Guide
-### Installation
+
+You can use MAGeCK_view directly from (this page)[https://cloxd.github.io/MAGeCK_view/] or downloading the file (mageckView.html)[https://raw.githubusercontent.com/CloXD/MAGeCK_view/main/mageckView.html]
+
+## Using CDN 
 Import the style and js dependencies as CDN:
 
 ```
@@ -59,7 +37,11 @@ Import the style and js dependencies as CDN:
       crossorigin="anonymous"></script>
 ```
 
-Import the file dist/mageck.min.js 
+Add the mageck-view CDN:
+```
+<script src="https://cdn.jsdelivr.net/npm/mageck-view@1.0.0/dist/mageck.min.js"></script>
+```
+
 
 ##
 
@@ -109,4 +91,28 @@ This might not be enough when there are many significant data points and the app
 
 
 
+
+## Development Guide
+
+### Install
+
+First install the dependencies:
+
+```
+npm install
+```
+
+For development:
+
+```
+npm run dev
+```
+
+For building the mageckView.html
+
+```
+npm run build
+```
+
+Files in the data folder are the demo of MAGeCK ( demo1 )
 
