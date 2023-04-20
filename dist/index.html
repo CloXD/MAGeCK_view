@@ -93,6 +93,13 @@
             </ul>
           </div>
           <div class="mb-3">
+            <label for="control-name" class="form-label">Control Gene name</label><br/>
+            <div class="input-group">
+              <input type="text" name="control-name" class="form-control" placeholder="NO-TARGET" id="control-name">
+              <button class="btn btn-outline-secondary" id="btn-change-control">Select</button>
+            </div>
+          </div>
+          <div class="mb-3">
             <button type="button" class="btn btn-primary" id="load-button" disabled>Load</button>
           </div>
         </div>
@@ -109,8 +116,7 @@
       integrity="sha384-ENjdO4Dr2bkBIFxQpeoTz1HIcje39Wm4jDKdf19U8gI4ddQ3GYNS7NTKfAdVQSZe"
       crossorigin="anonymous"
     ></script>
-    <script src="./mageck.js"></script>
-    
+    <script src="./mageck.min.js"></script>
     <script type="text/javascript">
 
       $(document).ready(function () {
@@ -143,7 +149,15 @@
           mgkv.library.splice(libIdx, 1);
           $(el.currentTarget).parent().remove();
         })
-       
+        $("#control-name").on("change", ()=>{
+          $("#btn-change-control").removeClass("btn-outline-success")
+          $("#btn-change-control").addClass("btn-outline-secondary")
+        })
+        $("#btn-change-control").on("click",()=>{
+          mgkv.setControlGene($("#control-name").val())
+          $("#btn-change-control").addClass("btn-outline-success")
+          $("#btn-change-control").removeClass("btn-outline-secondary")
+        })
         let fls = $("input.mkgv-file-loader");
         if ( mgkv.hasLibrary ){
           $("#library-input").addClass('is-valid');

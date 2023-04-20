@@ -1,20 +1,17 @@
 import { Alerts } from "./utils/alert";
-import { SgRNASummary } from "./data/sgRNASummary";
-import { GeneSummary } from "./data/geneSummary";
+import { MageckData } from "./data/MageckData";
 import { download } from "./utils/functions";
 import $ from "jquery";
-import DataTable from 'datatables.net';
 
 const SGC_DT = "sgrna";
 const SGS_DT = "sgrnaSummary";
 const GS_DT = "geneSummary";
-const COLOR_P = ["#04AF54", "#AFAA05", "#5D05AF", "#AF0585", "#68DE3D"];
 const KEEP_FRACTION = 0.1;
-const CONTROL_GENE = "NO-TARGET";
+const PLOTS_WITH_SELECTION = ["#mgkv-line-sgrna", "#mgkv-volcano-gene", "#mgkv-volcano-sg"];
 
 class MGKV {
   /**
-   * Initialize MAGeCK View in the given dom. 
+   * Initialize MAGeCK View in the given dom.
    * @param {string|jQueryDOM} root : id of the DIV or jQuery element
    */
   constructor(root) {
@@ -36,23 +33,20 @@ class MGKV {
     );
     this.root.append(
       $(
-        "<div class='row'><div class='col-12 mt-3'><h3>Plots </h3><small>click again on the plot button to refresh after changing options</small></div><div class='col-12'><div id='mgkv-plotly-buttons' class='btn-group'></div></div><div class='col-12 mt-2'><div id='mgkv-plotly-options'></div></div><div class='col-12'><div id='mgkv-plotly' style='min-height:80vh'></div></div></div>"
+        "<div class='row'><div class='col-12 mt-3'><h3>Plots </h3></div><div class='col-12'><div id='mgkv-plotly-buttons' class='btn-group'></div></div><div class='col-12 mt-2'><div id='mgkv-plotly-options'></div></div><div class='col-12'><div id='mgkv-plotly' style='min-height:80vh'></div></div></div>"
       )
     );
     this._initSgBoxplot();
     this._initVolcanoPlot();
     this._initSgLinePlot();
     this.alerts = new Alerts();
-    this.sgSummary = new SgRNASummary();
-    this.gSummary = new GeneSummary();
+    this.data = new MageckData();
   }
 
   geneTable = undefined;
   sgTable = undefined;
-  selectedGene = [];
-  normalization_factors = undefined;
-  control_gene = CONTROL_GENE;
   _display_count_normalization = "raw";
+  _last_plot ="";
   afterInit = () => {};
   /**
    * Parse a library file
@@ -61,14 +55,22 @@ class MGKV {
    * @returns Promise<number> return the index of the added library
    */
   parseLibrary(file, libName) {
-    return this.sgSummary.parseLibrary(file, libName);
+    return this.data.parseLibrary(file, libName);
   }
 
   /**
    * Get the list of library loaded
    */
-  get library(){
-    return this.sgSummary.sgLibrary
+  get library() {
+    return this.data.sgLibrary;
+  }
+
+  /**
+   * Set the control gene
+   * @param {string} gene
+   */
+  setControlGene(gene) {
+    this.data.control_gene = gene;
   }
 
   /**
@@ -89,20 +91,21 @@ class MGKV {
         reader.onloadend = () => {
           let exec = undefined;
           if (data_type == SGC_DT) {
-            exec = this.sgSummary.parseSgCount(data);
+            exec = this.data.parseSgCount(data);
           }
           if (data_type == GS_DT) {
-            exec = this.gSummary.parse(data);
+            exec = this.data.parseGeneSummary(data);
           }
           if (data_type == SGS_DT) {
-            exec = this.sgSummary.parse(data);
+            exec = this.data.parseSgRNASummary(data);
           }
-          exec.then((res) => {
-              this.alerts.success("File "+file.name+" imported correctly");
+          exec
+            .then((res) => {
+              this.alerts.success("File " + file.name + " imported correctly");
               resolve(res);
             })
             .catch((err) => {
-                console.log(err)
+              console.log(err);
               this.alerts.error(err);
               reject(err);
             });
@@ -120,40 +123,32 @@ class MGKV {
    * If the necessary files are imported, load the GUI
    * @returns Promise<void>
    */
-  load() {
-    return new Promise((resolve, reject) => {
-      if (this.ready) {
-        this.sgSummary.mergeCountSummary();
-        this._loading(true).then(() => {
-          this._initTables()
-            .then(() => {
-              this._loading(false).then(resolve);
-            })
-            .catch((err) => {
-              reject(err);
-            });
-        });
-      } else {
-        reject("Not redy");
-      }
-    });
+  async load() {
+    if (this.ready) {
+      await this._loading(true);
+      await this.data.mergeCountSummary();
+      await this._initTables();
+      await this._loading(false);
+    } else {
+      throw "Not ready";
+    }
   }
   /**
    * True if the required files are loaded
    */
   get ready() {
-    return this.sgSummary.ready && this.gSummary.ready;
+    return this.data.ready;
   }
   /**
    * List of samples loaded ( sgRNA count derived )
    */
-  get samples(){
-    return this.sgSummary.samples;
+  get samples() {
+    return this.data.samples;
   }
 
   /**
-  * Initialize the sgBoxplot options
-  */
+   * Initialize the sgBoxplot options
+   */
   _initSgBoxplot() {
     $("#mgkv-plotly-buttons").append(
       "<button class='btn btn-primary' id='mgkv-boxplot-sgrna'>sgRNA boxplot</button>"
@@ -173,7 +168,7 @@ class MGKV {
         "</select></div>" +
         "</div>"
     );
-    $("#mgkv-boxplot-sgrna").on("click",() => {
+    $("#mgkv-boxplot-sgrna").on("click", () => {
       $("#mgkv-plotly-buttons>button").removeClass("active");
       $("#mgkv-boxplot-sgrna").addClass("active");
       $(".mgkv-plt-opts").addClass("visually-hidden");
@@ -181,12 +176,16 @@ class MGKV {
       let opts = { norm: "raw", scale: "log10" };
       opts.norm = $("#mgkv-plt-opts-sgb-norm").val();
       opts.scale = $("#mgkv-plt-opts-sgb-scale").val();
+      this._last_plot = "#mgkv-boxplot-sgrna";
       this._sgBoxPlot(opts);
     });
+    $("#mgkv-plt-opts-sgb select").on("change", ()=>{
+      $("#mgkv-boxplot-sgrna").trigger("click");
+    })
   }
   /**
-  * Initialize the sgLinePlot options
-  */
+   * Initialize the sgLinePlot options
+   */
   _initSgLinePlot() {
     $("#mgkv-plotly-buttons").append(
       "<button class='btn btn-primary' id='mgkv-line-sgrna'>sgRNA expression</button>"
@@ -206,7 +205,7 @@ class MGKV {
         "</select></div>" +
         "</div>"
     );
-    $("#mgkv-line-sgrna").click(() => {
+    $("#mgkv-line-sgrna").on("click",() => {
       $("#mgkv-plotly-buttons>button").removeClass("active");
       $("#mgkv-line-sgrna").addClass("active");
       $(".mgkv-plt-opts").addClass("visually-hidden");
@@ -214,13 +213,17 @@ class MGKV {
       let opts = { norm: "raw", scale: "log10" };
       opts.norm = $("#mgkv-plt-opts-sgl-norm").val();
       opts.scale = $("#mgkv-plt-opts-sgl-scale").val();
+      this._last_plot = "#mgkv-line-sgrna";
       this._sgLinePlot(opts);
     });
+    $("#mgkv-plt-opts-sgl select").on("change", ()=>{
+      $("#mgkv-line-sgrna").trigger("click");
+    })
   }
 
   /**
-  * Initialize the VolcanoPlots options
-  */
+   * Initialize the VolcanoPlots options
+   */
   _initVolcanoPlot() {
     $("#mgkv-plotly-buttons").append(
       "<button class='btn btn-primary' id='mgkv-volcano-gene'>Genes Volcano Plot</button>"
@@ -231,33 +234,29 @@ class MGKV {
     $("#mgkv-plotly-options").append(
       "<div id='mgkv-plt-opts-gvp' class='btn-group mgkv-plt-opts row visually-hidden'>" +
         "<div class='col'><select class='form-select' id='mgkv-plt-opts-gvp-y'>" +
-        "<option value='pvalue' selected>Y axis value</option>" +
-        "<option value='pvalue'>p-value</option>" +
+        "<option value='pvalue' selected>p-value</option>" +
         "<option value='FDR'>FDR</option></select></div>" +
         "<div class='col'><select class='form-select' id='mgkv-plt-opts-gvp-grp'>" +
-        "<option value='best' selected>Test type</option>" +
-        "<option value='best' title='Most significant between positive and negative p-value'>Best</option>" +
+        "<option value='best' selected title='Most significant between positive and negative p-value'>Best</option>" +
         "<option value='neg'>Negative</option>" +
         "<option value='pos'>Positive</option></select></div>" +
         "<div class='col'><div class='input-group'><span class='input-group-text'>Significance threshold</span><input class='form-control' id='mgkv-plt-opts-gvp-thr0' type='number' value='0.05' ></div></div>" +
         "<div class='col'><div class='input-group'><span class='input-group-text'>Absolute LogFC threshold</span><input class='form-control' id='mgkv-plt-opts-gvp-thr1' type='number' value='1.0' ></div></div>" +
-        "<small>For performance reasons, only 10% of the Const data are shown.</small>" +
         "</div>"
     );
     $("#mgkv-plotly-options").append(
       "<div id='mgkv-plt-opts-svp' class='btn-group mgkv-plt-opts row visually-hidden'>" +
         "<div class='col'><select class='form-select' id='mgkv-plt-opts-svp-y'>" +
-        "<option value='pvalue' selected>Y axis value</option>" +
-        "<option value='pvalue'>p-value</option>" +
+        "<option value='pvalue' selected>p-value</option>" +
         "<option value='FDR'>FDR</option>" +
         "<option value='pLow'>p-value low</option>" +
         "<option value='pHigh'>p-value high</option></select></div>" +
         "<div class='col'><div class='input-group'><span class='input-group-text'>Significance threshold</span><input class='form-control' id='mgkv-plt-opts-svp-thr0' type='number' value='0.05' ></div></div>" +
         "<div class='col'><div class='input-group'><span class='input-group-text'>Absolute LogFC threshold</span><input class='form-control' id='mgkv-plt-opts-svp-thr1' type='number' value='1.0' ></div></div>" +
-        "<small>For performance reasons, only 10% of the Const data are shown.</small>" +
+        "<small>For performance reasons some data in dense regions are omitted.</small>" +
         "</div>"
     );
-    $("#mgkv-volcano-gene").click(() => {
+    $("#mgkv-volcano-gene").on("click", () => {
       $("#mgkv-plotly-buttons>button").removeClass("active");
       $("#mgkv-volcano-gene").addClass("active");
       $(".mgkv-plt-opts").addClass("visually-hidden");
@@ -267,9 +266,13 @@ class MGKV {
       opts.group = $("#mgkv-plt-opts-gvp-grp").val();
       opts.thr[0] = parseFloat($("#mgkv-plt-opts-gvp-thr0").val());
       opts.thr[1] = parseFloat($("#mgkv-plt-opts-gvp-thr1").val());
+      this._last_plot = "#mgkv-volcano-gene";
       this._geneVolcanoPlot(opts);
     });
-    $("#mgkv-volcano-sg").click(() => {
+    $("#mgkv-plt-opts-gvp select").on("change", ()=>{
+      $("#mgkv-volcano-gene").trigger("click");
+    })
+    $("#mgkv-volcano-sg").on("click", () => {
       $("#mgkv-plotly-buttons>button").removeClass("active");
       $("#mgkv-volcano-sg").addClass("active");
       $(".mgkv-plt-opts").addClass("visually-hidden");
@@ -279,14 +282,18 @@ class MGKV {
       opts.group = $("#mgkv-plt-opts-svp-grp").val();
       opts.thr[0] = parseFloat($("#mgkv-plt-opts-svp-thr0").val());
       opts.thr[1] = parseFloat($("#mgkv-plt-opts-svp-thr1").val());
+      this._last_plot = "#mgkv-volcano-sg";
       this._sgVolcanoPlot(opts);
     });
+    $("#mgkv-plt-opts-svp select").on("change", ()=>{
+      $("#mgkv-volcano-sg").trigger("click");
+    })
   }
   /**
    * Check if the input files have a correct name
-   * @param {string} fileName 
-   * @param {string} dataType 
-   * @returns 
+   * @param {string} fileName
+   * @param {string} dataType
+   * @returns
    */
   _validInput(fileName, dataType) {
     return (
@@ -300,8 +307,8 @@ class MGKV {
 
   /**
    * Draw the plot
-   * @param {PlotlyData} data 
-   * @param {PlotlyDataLayoutConfig} layout 
+   * @param {PlotlyData} data
+   * @param {PlotlyDataLayoutConfig} layout
    */
   _plot(data, layout) {
     this.datarevision += 1;
@@ -315,18 +322,17 @@ class MGKV {
    */
   _sgLinePlot(userOpts) {
     let opts = Object.assign({ norm: "raw", scale: "log10" }, userOpts);
-    if (this.selectedGene.length == 0) {
+    if (this.data.selectedGenes.length == 0) {
       this._plot([], {
         title: "Select one or more gene to see the expression of their sgRNAs",
       });
       return;
     }
     let data = [];
-    let genes = this.selectedGene.map((sg) => sg.name);
-    this.sgSummary.data
-      .filter((d) => genes.includes(d.gene))
-      .forEach((sg) => {
-        let gene = this.selectedGene.find((g) => g.name == sg.gene);
+    let genes = this.data.selectedGenes.map((sg) => sg.name);
+    this.data.sg_data.getData("filtered").then((response) => {
+      response.data.forEach((sg) => {
+        let gene = this.data.selectedGenes.find((g) => g.name == sg.gene);
         let gene_idx = genes.indexOf(sg.gene);
         let dat = {
           x: [],
@@ -339,7 +345,7 @@ class MGKV {
         };
         sg.counts.forEach((c, i) => {
           dat.x.push(this.samples[i].name);
-          let nc = this.sgSummary.normalization_factors[opts.norm][i] * c;
+          let nc = this.data.normalization_factors[opts.norm][i] * c;
           if (opts.scale == "log10") {
             dat.y.push(nc == 0 ? 0 : Math.log10(nc));
           } else if (opts.scale == "log2") {
@@ -354,31 +360,32 @@ class MGKV {
         }
         data.push(dat);
       });
-    let layout = {
-      title: "sgRNA expression plot",
-      xaxis: { title: genes[0] },
-      yaxis: {
-        title:
-          (opts.scale == "linear" ? "" : opts.scale + " ") +
-          (opts.norm == "raw" ? "raw" : opts.norm + " normalized") +
-          " counts",
-      },
-    };
-    genes.forEach((g, idx) => {
-      if (idx > 0) {
-        layout["xaxis" + (idx + 1)] = { title: g };
-        layout["yaxis" + (idx + 1)] = { title: layout.yaxis.title };
-      }
-    });
-    if (genes.length > 1) {
-      layout.grid = {
-        rows: genes.length > 2 ? Math.ceil(genes.length / 2) : 1,
-        columns: 2,
-        pattern: "independent",
+      let layout = {
+        title: "sgRNA expression plot",
+        xaxis: { title: genes[0] },
+        yaxis: {
+          title:
+            (opts.scale == "linear" ? "" : opts.scale + " ") +
+            (opts.norm == "raw" ? "raw" : opts.norm + " normalized") +
+            " counts",
+        },
       };
-    }
-    data = data.sort((a, b) => a.order - b.order);
-    this._plot(data, layout);
+      genes.forEach((g, idx) => {
+        if (idx > 0) {
+          layout["xaxis" + (idx + 1)] = { title: g };
+          layout["yaxis" + (idx + 1)] = { title: layout.yaxis.title };
+        }
+      });
+      if (genes.length > 1) {
+        layout.grid = {
+          rows: genes.length > 2 ? Math.ceil(genes.length / 2) : 1,
+          columns: 2,
+          pattern: "independent",
+        };
+      }
+      data = data.sort((a, b) => a.order - b.order);
+      this._plot(data, layout);
+    });
   }
 
   /**
@@ -387,12 +394,12 @@ class MGKV {
    */
   _sgBoxPlot(userOpts) {
     let opts = Object.assign({ norm: "raw", scale: "log10" }, userOpts);
-    let data = this.samples.map((s) => {
+    let data = this.data.samples.map((s) => {
       return { y: [], name: s.name, order: s.order, type: "box" };
     });
-    this.sgSummary.data.forEach((dat) => {
+    this.data.sg_data.data.forEach((dat) => {
       dat.counts.forEach((c, idx) => {
-        let nc = this.sgSummary.normalization_factors[opts.norm][idx] * c;
+        let nc = this.data.normalization_factors[opts.norm][idx] * c;
         if (opts.scale == "log10") {
           data[idx].y.push(nc == 0 ? 0 : Math.log10(nc));
         } else if (opts.scale == "log2") {
@@ -416,7 +423,7 @@ class MGKV {
     this._plot(data, layout);
   }
   /**
-   * 
+   *
    * @param {{value : string, group : string, thr : number[]}} userOpts define the value (pvalue, FDR), group (best, low, high) and thresholds [pvalue_thr, LFC_thr ]
    */
   _geneVolcanoPlot(userOpts) {
@@ -460,8 +467,8 @@ class MGKV {
         marker: { color: "#FF7D83" },
       },
     ];
-    if (this.selectedGene.length > 0) {
-      this.selectedGene.forEach((g) => {
+    if (this.data.selectedGenes.length > 0) {
+      this.data.selectedGenes.forEach((g) => {
         data.push({
           mode: "markers+text",
           type: "scatter",
@@ -475,7 +482,7 @@ class MGKV {
       });
     }
     let min_y = 1;
-    this.gSummary.data.forEach((d) => {
+    this.data.gene_data.data.forEach((d) => {
       let x,
         y,
         text = d.gene;
@@ -490,18 +497,15 @@ class MGKV {
         min_y = y;
       }
 
-      let grp = this.selectedGene.findIndex((sg) => sg.name == d.gene);
+      let grp = this.data.selectedGenes.findIndex((sg) => sg.name == d.gene);
       if (grp == -1) {
         grp = y > thr_y ? 1 : x < -thr_x ? 0 : x > thr_x ? 2 : 1;
       } else {
         grp = grp + 3;
       }
-      // randomly discard a % of the non selected and non significant genes
-      if (grp != 1 || Math.random() < KEEP_FRACTION) {
-        data[grp].x.push(x);
-        data[grp].y.push(y == 0 ? -1 : -Math.log10(y));
-        data[grp].text.push(text);
-      }
+      data[grp].x.push(x);
+      data[grp].y.push(y == 0 ? -1 : -Math.log10(y));
+      data[grp].text.push(text);
     });
     let max_y = -Math.log10(min_y);
     data.forEach((dat) => {
@@ -512,9 +516,9 @@ class MGKV {
   }
 
   /**
-  * sgRNA volcano plot
-  * @param {*} userOpts define the value (pvalue, FDR, pLow, pHigh) and thresholds [pvalue_thr, LFC_thr ]
-  */
+   * sgRNA volcano plot
+   * @param {*} userOpts define the value (pvalue, FDR, pLow, pHigh) and thresholds [pvalue_thr, LFC_thr ]
+   */
   _sgVolcanoPlot(userOpts) {
     let opts = Object.assign({ value: "pvalue", thr: [0.05, 1] }, userOpts);
     let thr_x = opts.thr[1];
@@ -524,6 +528,7 @@ class MGKV {
       xaxis: { title: "LogFC" },
       yaxis: { title: opts.value },
     };
+
     let data = [
       {
         mode: "markers",
@@ -553,8 +558,8 @@ class MGKV {
         marker: { color: "#FF7D83" },
       },
     ];
-    if (this.selectedGene.length > 0) {
-      this.selectedGene.forEach((g) => {
+    if (this.data.selectedGenes.length > 0) {
+      this.data.selectedGenes.forEach((g) => {
         data.push({
           mode: "markers+text",
           type: "scatter",
@@ -567,8 +572,9 @@ class MGKV {
         });
       });
     }
-    let min_y = 1;
-    this.sgSummary.data.forEach((d) => {
+    let min_y = 1, min_x=0, max_x=0;
+    let data_points=[];
+    this.data.sg_data.data.forEach((d) => {
       let x,
         y,
         text = d.sgrna;
@@ -579,24 +585,49 @@ class MGKV {
         min_y = y;
       }
 
-      let grp = this.selectedGene.findIndex((sg) => sg.name == d.gene);
+      let grp = this.data.selectedGenes.findIndex((sg) => sg.name == d.gene);
       if (grp == -1) {
         grp = y > thr_y ? 1 : x < -thr_x ? 0 : x > thr_x ? 2 : 1;
       } else {
         grp = grp + 3;
       }
-      /// randomly discard a % of the non significant and not selected samples
-      if (grp != 1 || Math.random() < KEEP_FRACTION) {
-        data[grp].x.push(x);
-        data[grp].y.push(y == 0 ? -1 : -Math.log10(y));
-        data[grp].text.push(text);
+      if ( x < min_x ){
+        min_x = x
       }
+      if (x > max_x ){
+        max_x = x
+      }
+      data_points.push({x: x, y : y == 0 ? -1 : -Math.log10(y), text : text, grp : grp});
     });
-
     let max_y = -Math.log10(min_y);
-    data.forEach((dat) => {
-      dat.y = dat.y.map((y) => (y == -1 ? max_y : y));
+    data_points.forEach((dat) => {
+      dat.y = dat.y == -1 ? max_y : dat.y;
     });
+    /// create a grid and add only 10 data points for each grid
+    let grid = {};
+    data_points.forEach((dat)=>{
+      let keep = dat.grp > 2;
+      if ( ! keep ){
+        let grid_x = Math.round(((dat.x - min_x) *300 )/ (max_x - min_x))
+        let grid_y = Math.round(((dat.y ) *100 )/ (max_y ))
+        let grid_k =grid_x+":"+grid_y; 
+        if ( ! grid[grid_k] ){
+          grid[grid_k]=1;
+          keep=true;
+        } else {
+          if ( grid[grid_k] <= 100 ){
+            keep=true;
+            grid[grid_k]+=1;
+          }
+        }
+      }
+      if ( keep ){
+        data[dat.grp].x.push(dat.x);
+        data[dat.grp].y.push(dat.y);
+        data[dat.grp].text.push(dat.text);
+      }
+    })
+
     this._plot(data, layout);
   }
 
@@ -627,22 +658,37 @@ class MGKV {
           "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
           "<'row'<'col-sm-12'tr>>" +
           "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
-        serverSide : true,
-        processing : true,
-        searchDelay: 1000,
-        ajax : (request, callback, settings )=>{
-            this.gSummary.getData(request, settings).then((response)=>{
-                callback(response);
+        serverSide: true,
+        processing: true,
+        search: { regex: true, smart: false },
+        ajax: (request, callback) => {
+          this.data
+            .getGeneData(request, this._display_count_normalization)
+            .then((response) => {
+              callback(response);
             });
         },
         colReorder: true,
         rowId: "gene",
         buttons: [
-          "csv",
+          {
+            text: "Download",
+            action: (_, bt, btn) => {
+              this.data
+                .getGeneData("filtered", this._display_count_normalization)
+                .then((response) => {});
+            },
+          },
           "colvis",
-          { extend: "searchBuilder", config: {  conditions : {
-            num : { "!null" : null, "null" : null }, string : { "!null" : null, "null" : null }
-          }} },
+          {
+            extend: "searchBuilder",
+            config: {
+              conditions: {
+                num: { "!null": null, null: null },
+                string: { "!null": null, null: null },
+              },
+            },
+          },
         ],
         order: [[2, "desc"]],
         columns: [
@@ -848,18 +894,7 @@ class MGKV {
       this.samples.forEach((sam, idx) => {
         sgTableCols.push({
           title: sam.name,
-          data: null,
-          render: (row) => {
-            return (
-              Math.round(
-                this.sgSummary.normalization_factors[this._display_count_normalization][
-                  idx
-                ] *
-                  row.counts[idx] *
-                  100
-              ) / 100
-            );
-          },
+          data: sam.name,
           orderable: true,
           searchable: true,
           visible: true,
@@ -874,11 +909,88 @@ class MGKV {
           "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
           "<'row'<'col-sm-12'tr>>" +
           "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
-        data: this.sgSummary.data,
+        serverSide: true,
+        processing: true,
+        search: { regex: true, smart: false },
+        ajax: (request, callback) => {
+          this.data
+            .getSgRNAData(request, this._display_count_normalization)
+            .then((response) => {
+              callback(response);
+            });
+        },
         colReorder: true,
         rowId: "sgrna",
         buttons: [
-          "csv",
+          {
+            text: "Download",
+            action: (_, bt, btn) => {
+              this.data
+                .getSgRNAData("filtered", this._display_count_normalization)
+                .then((response) => {
+                  let out = this.data.sg_data.header.join("\t") + "\n";
+                  response.data.forEach((d) => {
+                    out +=
+                      [
+                        d.sgrna,
+                        d.gene,
+                        d.control_count,
+                        d.treatment_count,
+                        d.means[0],
+                        d.means[1],
+                        d.LFC,
+                        d.control_var,
+                        d.adj_var,
+                        d.score,
+                        d.pLow,
+                        d.pHigh,
+                        d.pvalue,
+                        d.FDR,
+                        d.highInTreatment ? "True" : "False",
+                      ].join("\t") + "\n";
+                  });
+                  download("mageck_view.filtered.sg_counts.txt", out);
+                });
+            },
+          },
+          {
+            text: "Download with counts",
+            action: (_, bt, btn) => {
+              this.data
+                .getSgRNAData("filtered", this._display_count_normalization)
+                .then((response) => {
+                  let out =
+                    this.data.sg_data.header.join("\t") +
+                    this.data.samples.map((s) => s.name).join("\t") +
+                    "\n";
+                  response.data.forEach((d) => {
+                    out +=
+                      [
+                        d.sgrna,
+                        d.gene,
+                        d.control_count,
+                        d.treatment_count,
+                        d.means[0],
+                        d.means[1],
+                        d.LFC,
+                        d.control_var,
+                        d.adj_var,
+                        d.score,
+                        d.pLow,
+                        d.pHigh,
+                        d.pvalue,
+                        d.FDR,
+                        d.highInTreatment ? "True" : "False",
+                      ].join("\t") +
+                      "\t" +
+                      this.data.samples.map((s) => d[s.name]).join("\t") +
+                      "\n";
+                  });
+                  download("mageck_view.filtered.sg_counts.txt", out);
+                });
+            },
+          },
+
           "colvis",
           "searchBuilder",
           {
@@ -886,7 +998,7 @@ class MGKV {
             text: "Count types",
             buttons: [
               {
-                text: "raw",
+                text: "Raw counts",
                 className:
                   this._display_count_normalization == "raw"
                     ? "active norm-buttons"
@@ -949,89 +1061,96 @@ class MGKV {
           },
           {
             extend: "collection",
-            text: "Download filtered count table",
+            text: "Download count table",
             buttons: [
               {
                 text: "Raw",
                 action: (_, dt) => {
-                  let outfile =
-                    "sgRNA\tGene\t" +
-                    this.samples.map((sam) => sam.name).join("\t") +
-                    "\n";
-                  dt.rows({ search: "applied" })
-                    .data()
-                    .toArray()
-                    .forEach((el) => {
+                  this.data.getSgRNAData("filtered", "raw").then((response) => {
+                    let outfile =
+                      "sgRNA\tGene\t" +
+                      this.samples.map((sam) => sam.name).join("\t") +
+                      "\n";
+                    response.data.forEach((d) => {
                       outfile +=
-                        [el.sgrna, el.gene].concat(el.counts).join("\t") + "\n";
+                        d.sgrna +
+                        "\t" +
+                        d.gene +
+                        "\t" +
+                        this.samples.map((sam) => d[sam.name]).join("\t") +
+                        "\n";
                     });
-                  download("raw.counts.txt", outfile);
+                    download("raw.counts.txt", outfile);
+                  });
                 },
               },
               {
                 text: "Median normalized",
                 action: (_, dt) => {
-                  let outfile =
-                    "sgRNA\tGene\t" +
-                    this.samples.map((sam) => sam.name).join("\t") +
-                    "\n";
-                  let data = dt.rows({ search: "applied" }).data().toArray();
-                  let nf = this._computeMedianNormFactor(data);
-                  data.forEach((el) => {
-                    outfile +=
-                      [el.sgrna, el.gene]
-                        .concat(
-                          el.counts.map(
-                            (v, i) => Math.round(v * nf[i] * 100) / 100
-                          )
-                        )
-                        .join("\t") + "\n";
-                  });
-                  download("median_normalized.counts.txt", outfile);
+                  this.data
+                    .getSgRNAData("filtered", "median")
+                    .then((response) => {
+                      let outfile =
+                        "sgRNA\tGene\t" +
+                        this.samples.map((sam) => sam.name).join("\t") +
+                        "\n";
+                      response.data.forEach((d) => {
+                        outfile +=
+                          d.sgrna +
+                          "\t" +
+                          d.gene +
+                          "\t" +
+                          this.samples.map((sam) => d[sam.name]).join("\t") +
+                          "\n";
+                      });
+                      download("median.counts.txt", outfile);
+                    });
                 },
               },
               {
                 text: "Total normalized",
                 action: (_, dt) => {
-                  let outfile =
-                    "sgRNA\tGene\t" +
-                    this.samples.map((sam) => sam.name).join("\t") +
-                    "\n";
-                  let data = dt.rows({ search: "applied" }).data().toArray();
-                  let nf = this._computeTotalNormFactor(data);
-                  data.forEach((el) => {
-                    outfile +=
-                      [el.sgrna, el.gene]
-                        .concat(
-                          el.counts.map(
-                            (v, i) => Math.round(v * nf[i] * 100) / 100
-                          )
-                        )
-                        .join("\t") + "\n";
-                  });
-                  download("total_normalized.counts.txt", outfile);
+                  this.data
+                    .getSgRNAData("filtered", "total")
+                    .then((response) => {
+                      let outfile =
+                        "sgRNA\tGene\t" +
+                        this.samples.map((sam) => sam.name).join("\t") +
+                        "\n";
+                      response.data.forEach((d) => {
+                        outfile +=
+                          d.sgrna +
+                          "\t" +
+                          d.gene +
+                          "\t" +
+                          this.samples.map((sam) => d[sam.name]).join("\t") +
+                          "\n";
+                      });
+                      download("total.counts.txt", outfile);
+                    });
                 },
               },
               {
                 text: "Control normalized",
                 action: (_, dt) => {
-                  let outfile =
-                    "sgRNA\tGene\t" +
-                    this.samples.map((sam) => sam.name).join("\t") +
-                    "\n";
-                  let data = dt.rows({ search: "applied" }).data().toArray();
-                  let nf = this._computeControlNormFactor(data);
-                  data.forEach((el) => {
-                    outfile +=
-                      [el.sgrna, el.gene]
-                        .concat(
-                          el.counts.map(
-                            (v, i) => Math.round(v * nf[i] * 100) / 100
-                          )
-                        )
-                        .join("\t") + "\n";
-                  });
-                  download("control_normalized.counts.txt", outfile);
+                  this.data
+                    .getSgRNAData("filtered", "control")
+                    .then((response) => {
+                      let outfile =
+                        "sgRNA\tGene\t" +
+                        this.samples.map((sam) => sam.name).join("\t") +
+                        "\n";
+                      response.data.forEach((d) => {
+                        outfile +=
+                          d.sgrna +
+                          "\t" +
+                          d.gene +
+                          "\t" +
+                          this.samples.map((sam) => d[sam.name]).join("\t") +
+                          "\n";
+                      });
+                      download("control.counts.txt", outfile);
+                    });
                 },
               },
             ],
@@ -1043,16 +1162,18 @@ class MGKV {
       $("#mgkv-gene-table tbody").on("click", "tr", (el) => {
         let $el = $(el.currentTarget);
         let gene = $el.attr("id");
-        if (this.gSummary.isSelected(gene)) {
-          this.gSummary.deselectGene(gene);
+        if (this.data.isSelected(gene)) {
           $el.removeClass("selected");
         } else {
-          this.gSummary.selectGene(gene);
           $el.addClass("selected");
         }
-        this._updateSelectedGene();
+        this.data.toggleGene(gene);
+        this.sgTable.draw();
+        if ( PLOTS_WITH_SELECTION.includes(this._last_plot) ){
+          $(this._last_plot).trigger("click");
+        }
       });
-      $("#mgkv-boxplot-sgrna").click();
+      $("#mgkv-boxplot-sgrna").trigger("click");
       this.afterInit();
       resolve();
       return true;
@@ -1060,15 +1181,8 @@ class MGKV {
   }
 
   /**
-   * Update the plot and sgRNA table to show or highlight the selected genes' sgRNAs
-   */
-  _updateSelectedGene() {
-    this.sgTable.draw();
-  }
-
-  /**
    * Enable or disable the loading div
-   * @param {boolean} enable 
+   * @param {boolean} enable
    * @returns Promise<void>
    */
   _loading(enable = true) {
@@ -1085,4 +1199,4 @@ class MGKV {
   }
 }
 
-export {MGKV as default}
+export { MGKV as default };

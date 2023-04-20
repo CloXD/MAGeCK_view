@@ -13,14 +13,5 @@ function download(filename, text) {
     document.body.removeChild(element);
   }
 
-/**
- * Perform a filter on a single instance of a data element
- * @param {*} dat 
- * @param {*} search 
- * @returns boolean
- */
-function apply_filter(dat, search){
-  return true
-}
 
-export {download, apply_filter}
+export {download}

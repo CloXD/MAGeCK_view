@@ -24,10 +24,13 @@ For building the mageckView.html
 npm run build
 ```
 
+Files in the data folder are the demo of MAGeCK ( demo1 )
+
 
 ## User Guide
 ### Installation
-Import the dependencies as CDN:
+Import the style and js dependencies as CDN:
+
 ```
 <link href="https://cdn.datatables.net/v/bs5/dt-1.13.4/b-2.3.6/b-colvis-2.3.6/b-html5-2.3.6/cr-1.6.2/sb-1.4.2/datatables.min.css" rel="stylesheet" />
 <link
@@ -56,6 +59,12 @@ Import the dependencies as CDN:
       crossorigin="anonymous"></script>
 ```
 
+Import the file dist/mageck.min.js 
+
+##
+
+
+
 ## Test on Galaxy
 Given the raw count table, you can perform additional tests using galaxy: https://usegalaxy.eu
 Search for MAGeCK test ( or MAGeCK mle ), upload the raw count table and seelct the options that you prefer.
@@ -73,7 +82,7 @@ It requires 3 files:
  - *.gene_summary.txt file ( output of MAGeCK )
  - *.sgrna_summary.txt file ( output of MAGeCK )
 
-If you reload the page, it should load the previous files uploaded. If you want to change the files, reload with CTRL+F5
+If you reload the page, it should load the previous files uploaded.
 
 
 ### Tables Functionalities: 
