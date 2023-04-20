@@ -4,7 +4,7 @@ A JavaScript project to visualize the results of MAGeCK.
 
 ## User Guide
 
-You can use MAGeCK_view directly from (this page)[https://cloxd.github.io/MAGeCK_view/] or downloading the file (mageckView.html)[https://raw.githubusercontent.com/CloXD/MAGeCK_view/main/mageckView.html]
+You can use MAGeCK_view directly from [this page](https://cloxd.github.io/MAGeCK_view/) or downloading the file [mageckView.html](https://raw.githubusercontent.com/CloXD/MAGeCK_view/main/mageckView.html)
 
 ## Using CDN 
 Import the style and js dependencies as CDN:
