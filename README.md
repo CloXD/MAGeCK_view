@@ -2,6 +2,69 @@
 A JavaScript project to visualize the results of MAGeCK. 
 It's currenlty quite slow, but for a two-days project It's not so bad :) 
 
+## Development Guide
+
+### Install
+
+First install the dependencies:
+
+```
+npm install
+```
+
+For development:
+
+```
+npm run dev
+```
+
+For building the mageckView.html
+
+```
+npm run build
+```
+
+Files in the data folder are the demo of MAGeCK ( demo1 )
+
+
+## User Guide
+### Installation
+Import the style and js dependencies as CDN:
+
+```
+<link href="https://cdn.datatables.net/v/bs5/dt-1.13.4/b-2.3.6/b-colvis-2.3.6/b-html5-2.3.6/cr-1.6.2/sb-1.4.2/datatables.min.css" rel="stylesheet" />
+<link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-KK94CHFLLe+nY2dmCWGMq91rCGa5gtU4mk92HdvYe+M/SXH301p5ILy+dN9+nJOZ"
+      crossorigin="anonymous"
+    />
+<link 
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.2/font/bootstrap-icons.css" 
+    rel="stylesheet" 
+    integrity="sha384-b6lVK+yci+bfDmaY1u0zE8YYJt0TZxLEAFyYSLHId4xoVvsrQu3INevFKo+Xir8e" 
+    crossorigin="anonymous">
+
+```
+
+```
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+<script src="https://cdn.datatables.net/v/bs5/dt-1.13.4/b-2.3.6/b-colvis-2.3.6/b-html5-2.3.6/cr-1.6.2/sb-1.4.2/datatables.min.js"></script>
+<script
+    src="https://cdn.plot.ly/plotly-2.20.0.min.js"
+    charset="utf-8"></script>
+<script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-ENjdO4Dr2bkBIFxQpeoTz1HIcje39Wm4jDKdf19U8gI4ddQ3GYNS7NTKfAdVQSZe"
+      crossorigin="anonymous"></script>
+```
+
+Import the file dist/mageck.min.js 
+
+##
+
+
+
 ## Test on Galaxy
 Given the raw count table, you can perform additional tests using galaxy: https://usegalaxy.eu
 Search for MAGeCK test ( or MAGeCK mle ), upload the raw count table and seelct the options that you prefer.
@@ -19,7 +82,7 @@ It requires 3 files:
  - *.gene_summary.txt file ( output of MAGeCK )
  - *.sgrna_summary.txt file ( output of MAGeCK )
 
-If you reload the page, it should load the previous files uploaded. If you want to change the files, reload with CTRL+F5
+If you reload the page, it should load the previous files uploaded.
 
 
 ### Tables Functionalities: 
@@ -42,6 +105,7 @@ The plots containing the sgRNA counts have different normalization options. The 
 
 *Important*: since the volcano plots were quite slow, I kept randomly only 10% of the data in the constant group ( not selected positively nor negatively ). 
 This might not be enough when there are many significant data points and the application might slow down, be patient :) 
+
 
 
 
