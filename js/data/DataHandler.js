@@ -18,48 +18,53 @@ function generateSearcher(builder_search) {
     if (crit.type == "num") crit.value = crit.value.map((v) => parseFloat(v));
     let op = (v)=>true;
     let data = crit.origData;
+    let getData = (v)=>v[data]
+    if ( data.includes("." )){
+      data=data.split(".");
+      getData = (v)=>v[data[0]][data[1]]
+    }
     switch (crit.condition) {
       case "!=":
-        op = (v)=>v[data]!=crit.value[0]
+        op = (v)=>getData(v)!=crit.value[0]
         break;
       case "=":
-        op = (v)=>v[data]==crit.value[0]
+        op = (v)=>getData(v)==crit.value[0]
         break;
       case "<":
-        op = (v)=>v[data]<crit.value[0]
+        op = (v)=>getData(v)<crit.value[0]
         break;
       case "<=":
-        op = (v)=>v[data]<=crit.value[0]
+        op = (v)=>getData(v)<=crit.value[0]
         break;
       case ">":
-        op = (v)=>v[data]>crit.value[0]
+        op = (v)=>getData(v)>crit.value[0]
         break;
       case ">=":
-        op = (v)=>v[data]>=crit.value[0]
+        op = (v)=>getData(v)>=crit.value[0]
         break;
       case "between":
-        op = (v)=> v[data] >= crit.value[0] && v[data] <= crit.value[1]
+        op = (v)=> getData(v) >= crit.value[0] && getData(v) <= crit.value[1]
         break;
       case "!between":
-        op = (v)=> v[data] < crit.value[0] || v[data] > crit.value[1]
+        op = (v)=> getData(v) < crit.value[0] || getData(v) > crit.value[1]
         break;
       case "starts":
-        op = (v)=> v[data].startsWith(crit.value[0])
+        op = (v)=> getData(v).startsWith(crit.value[0])
         break;
       case "!starts":
-        op = (v)=> !v[data].startsWith(crit.value[0])
+        op = (v)=> !getData(v).startsWith(crit.value[0])
         break;
       case "contains":
-        op = (v)=> v[data].includes(crit.value[0])
+        op = (v)=> getData(v).includes(crit.value[0])
         break;
       case "!contains":
-        op = (v)=> !v[data].includes(crit.value[0])
+        op = (v)=> !getData(v).includes(crit.value[0])
         break;
       case "ends":
-        op = (v)=> v[data].endsWith(crit.value[0])
+        op = (v)=> getData(v).endsWith(crit.value[0])
         break;
       case "!ends":
-        op = (v)=> !v[data].endsWith(crit.value[0])
+        op = (v)=> !getData(v).endsWith(crit.value[0])
         break;
     }
     opts.push(op);
@@ -143,7 +148,6 @@ class DataHandler {
       let has_selected_genes = search.selected_genes && search.selected_genes.length > 0;
       this._filtered = [...Array(this.data.length).keys()];
       if ( has_selected_genes ){
-        console.log(search.selected_genes)
         this._filtered = this._filtered.filter((el)=>search.selected_genes.includes(this.data[el].gene));
       }
       if (has_builder_search) {
